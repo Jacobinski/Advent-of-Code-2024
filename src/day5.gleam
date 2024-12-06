@@ -39,38 +39,11 @@ fn inverse_rules(rules: List(String)) -> dict.Dict(String, List(String)) {
 }
 
 /// Checks if a rulebook update list is valid.
-fn update_is_valid(update: List(String), inverse_rules: dict.Dict(String, List(String))) -> Bool {
-    case list.fold(update, #(True, []), fn(tup, num) {
-        let #(valid, forbidden) = tup
-        let num_is_valid = list.contains(forbidden, num) == False
-        let new_forbidden = case dict.get(inverse_rules, num) {
-            Ok(arr) -> arr
-            Error(_) -> []
-        }
-        #(valid && num_is_valid, list.append(forbidden, new_forbidden))
-    }) {
-        #(True, _) -> True
-        #(False, _) -> False
+fn update_is_valid(update: List(String), rules: List(String)) -> Bool {
+    case find_violation(update, rules) {
+        option.None -> True
+        option.Some(_) -> False
     }
-}
-
-fn part1(rules: List(String), updates: List(String)) -> Int {
-    let inverse_rules = inverse_rules(rules)
-
-    let valid_updates = updates
-        |> list.map(string.split(_, ","))
-        |> list.filter(update_is_valid(_, inverse_rules))
-
-    let assert Ok(sum_of_medians) = valid_updates
-        |> list.map(fn(x) {
-            let assert Ok(first) = list.drop(x, list.length(x) / 2)
-                |> list.first()
-            let assert Ok(num) = int.parse(first)
-            num
-        })
-        |> list.reduce(int.add)
-
-    sum_of_medians
 }
 
 fn find_violation(update: List(String), rules: List(String)) -> option.Option(#(String, String)) {
@@ -128,20 +101,9 @@ fn swap(update: List(String), from: String, to: String) -> List(String) {
     })
 }
 
-
-fn part2(rules: List(String), updates: List(String)) -> Int {
-    let inverse_rules = inverse_rules(rules)
-
-    let invalid_updates = updates
-        |> list.map(string.split(_, ","))
-        |> list.filter(fn(u) { update_is_valid(u, inverse_rules) == False })
-
-    let fixed_updates = invalid_updates
-        |> list.map(fn(update){
-            fix_violations(update, rules)
-        })
-
-    let assert Ok(sum_of_medians) = fixed_updates
+// Adds together the median value in each list
+fn sum_medians(updates: List(List(String))) -> Int {
+    let assert Ok(sum_of_medians) = updates
         |> list.map(fn(x) {
             let assert Ok(first) = list.drop(x, list.length(x) / 2)
                 |> list.first()
@@ -149,6 +111,26 @@ fn part2(rules: List(String), updates: List(String)) -> Int {
             num
         })
         |> list.reduce(int.add)
-
     sum_of_medians
+}
+
+fn part1(rules: List(String), updates: List(String)) -> Int {
+    let valid_updates = updates
+        |> list.map(string.split(_, ","))
+        |> list.filter(update_is_valid(_, rules))
+
+    sum_medians(valid_updates)
+}
+
+fn part2(rules: List(String), updates: List(String)) -> Int {
+    let invalid_updates = updates
+        |> list.map(string.split(_, ","))
+        |> list.filter(fn(u) { update_is_valid(u, rules) == False })
+
+    let fixed_updates = invalid_updates
+        |> list.map(fn(update){
+            fix_violations(update, rules)
+        })
+
+    sum_medians(fixed_updates)
 }
