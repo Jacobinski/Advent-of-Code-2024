@@ -67,12 +67,7 @@ pub fn trailscore_helper(want_height: Int, coordinates: Coordinates, map: Map) -
 
 pub fn trailheads(map: Map) -> List(Coordinates) {
     map
-    |> dict.filter(fn(_coordinates, height) {
-        case height {
-            0 -> True
-            _ -> False
-        }
-    })
+    |> dict.filter(fn(_coordinates, height) { height == 0 })
     |> dict.keys
 }
 
