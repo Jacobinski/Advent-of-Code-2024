@@ -12,22 +12,20 @@ pub type Map = dict.Dict(Coordinates, Int)
 
 pub fn main() {
     let assert Ok(contents) = file.read("inputs/day10.txt")
-    io.println("Part 1: " <> int.to_string(part1(contents)))
-    io.println("Part 2: " <> int.to_string(part2(contents)))
-}
-
-pub fn part1(contents: String) -> Int {
     let map = parse_map(contents)
     let trailheads = trailheads(map)
+    io.println("Part 1: " <> int.to_string(part1(trailheads, map)))
+    io.println("Part 2: " <> int.to_string(part2(trailheads, map)))
+}
+
+pub fn part1(trailheads: List(Coordinates), map: Map) -> Int {
     let assert Ok(score) = trailheads
         |> list.map(trailscore(_, map))
         |> list.reduce(int.add)
     score
 }
 
-pub fn part2(contents: String) -> Int {
-    let map = parse_map(contents)
-    let trailheads = trailheads(map)
+pub fn part2(trailheads: List(Coordinates), map: Map) -> Int {
     let assert Ok(score) = trailheads
         |> list.map(rating(_, map))
         |> list.reduce(int.add)
