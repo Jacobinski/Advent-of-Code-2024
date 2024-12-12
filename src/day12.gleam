@@ -18,6 +18,61 @@ pub fn main() {
     let assert Ok(contents) = file.read("inputs/day12.txt")
     let farm_map = parse(contents)
     io.println("Part 1: " <> int.to_string(part1(farm_map)))
+    io.println("Part 2: " <> int.to_string(part2(farm_map)))
+}
+
+pub fn part2(farm_map: FarmMap) -> Int {
+    // This part can be solved by counting the verticies of the box
+    // instead of measuring the number of continuous sides. This is
+    // simple to wrap your head around theoretically (one side = one
+    // vertex) but keeping track of it all is quite annoying.
+    let regions = {
+        farm_map
+        |> dict.to_list
+        |> list.fold([], fn(regions, plot) {
+            let #(coordinate, crop) = plot
+            let all_plots_in_regions = list.flatten(regions)
+            case is_visited(coordinate, all_plots_in_regions) {
+                True -> regions
+                False -> list.append(regions, [search(crop, coordinate, [], farm_map)])
+            }
+        })
+    }
+    regions
+    |> list.fold(0, fn(acc, region) {
+        let farm_dict = region |> list.map(fn(p) { #(p.coordinate, p)}) |> dict.from_list
+        let area = list.length(region)
+        let assert Ok(sides) = {
+            region
+            |> list.fold(dict.new(), fn(verticies, plot) {
+                let #(x, y) = plot.coordinate
+                verticies
+                |> dict.insert(#(x, y), vertex_count(farm_dict, #(x-1, y-1), #(x-1, y), #(x, y-1)))
+                |> dict.insert(#(x+1, y), vertex_count(farm_dict, #(x+1, y-1), #(x, y-1), #(x+1, y)))
+                |> dict.insert(#(x, y+1), vertex_count(farm_dict, #(x-1, y+1), #(x-1, y), #(x, y+1)))
+                |> dict.insert(#(x+1, y+1), vertex_count(farm_dict, #(x+1, y+1), #(x+1, y), #(x, y+1)))
+            })
+            |> dict.values
+            |> list.reduce(int.add)
+        }
+        acc + area * sides
+    })
+}
+
+pub fn vertex_count(d: dict.Dict(Coordinate, Plot), diagonal: Coordinate, neighbor1: Coordinate, neighbor2: Coordinate) -> Int {
+    let diagonal = dict.get(d, diagonal)
+    let neighbor1 = dict.get(d, neighbor1)
+    let neighbor2 = dict.get(d, neighbor2)
+    case diagonal, neighbor1, neighbor2 {
+        Ok(_), Ok(_), Ok(_) -> 0
+        Error(_), Error(_), Ok(_) -> 0
+        Error(_), Ok(_), Error(_) -> 0
+        Ok(_), Error(_), Ok(_) -> 1
+        Ok(_), Ok(_), Error(_) -> 1
+        Error(_), Ok(_), Ok(_) -> 1
+        Error(_), Error(_), Error(_) -> 1
+        Ok(_), Error(_), Error(_) -> 2
+    }
 }
 
 pub fn part1(farm_map: FarmMap) -> Int {
