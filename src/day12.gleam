@@ -114,8 +114,8 @@ pub fn search(target: Crop, coordinate: Coordinate, region: List(Plot), map: Far
     let is_visited = is_visited(coordinate, region)
     let is_correct = is_correct_target(target, coordinate, map)
     case is_visited, is_correct {
-        True, _ -> []
-        False, False -> []
+        True, _ -> region
+        False, False -> region
         False, True -> {
             let #(x, y) = coordinate
             let neighbors = [
@@ -126,18 +126,15 @@ pub fn search(target: Crop, coordinate: Coordinate, region: List(Plot), map: Far
             ] |> list.count(fn(x) { x == True })
 
             // This weird structure ensures that we don't have an infinite loop.
-            // We depth-first-search in each direction, and maintain the list
-            // pass along the list of known nodes with each iteration.
-            // We DFS in each direction, save the
+            // Each iteration will return the original region, plus any newly
+            // seen nodes. This is an alternative to the usual global seen map
+            // used with more permissive languages.
             let region = [Plot(coordinate, neighbors, target), ..region]
-            let region = list.append(search(target, #(x+1, y), region, map), region)
-            let region = list.append(search(target, #(x-1, y), region, map), region)
-            let region = list.append(search(target, #(x, y+1), region, map), region)
-            let region = list.append(search(target, #(x, y-1), region, map), region)
-            // HACK: Deduplicate
+            let region = search(target, #(x+1, y), region, map)
+            let region = search(target, #(x-1, y), region, map)
+            let region = search(target, #(x, y+1), region, map)
+            let region = search(target, #(x, y-1), region, map)
             region
-            |> set.from_list
-            |> set.to_list
         }
     }
 }
