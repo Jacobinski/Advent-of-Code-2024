@@ -3,7 +3,6 @@ import gleam/int
 import gleam/list
 import gleam/io
 import gleam/string
-import gleam/set
 import simplifile as file
 
 pub type Crop = String
