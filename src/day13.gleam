@@ -4,7 +4,8 @@ import gleam/list
 import gleam/result
 import gleam/io
 import gleam/option
-import rememo/memo
+import gleam/float
+import gleam/pair
 import simplifile as file
 
 pub type Coordinate = #(Int, Int)
@@ -14,13 +15,11 @@ pub type Arcade {
     Arcade(a: Button, b: Button, target: Target)
 }
 
-const tokens_a = 3
-const tokens_b = 1
-
 pub fn main() {
     let assert Ok(contents) = file.read("inputs/day13.txt")
     let arcades = parse(contents)
     io.println("Part 1: " <> int.to_string(part1(arcades)))
+    io.println("Part 2: " <> int.to_string(part2(arcades)))
 }
 
 pub fn part1(arcades: List(Arcade)) -> Int {
@@ -36,34 +35,48 @@ pub fn part1(arcades: List(Arcade)) -> Int {
     |> result.unwrap(-1)
 }
 
-pub fn tokens(arcade: Arcade) -> Result(Int, Nil) {
-    use cache <- memo.create()
-    tokens_helper(arcade.target, arcade.a, arcade.b, cache)
+pub fn part2(arcades: List(Arcade)) -> Int {
+    arcades
+    |> list.map(modify_arcade_for_part2)
+    |> part1
 }
 
-pub fn tokens_helper(curr: Coordinate, a: Button, b: Button, cache) -> Result(Int, Nil) {
-    use <- memo.memoize(cache, curr)
-    {
-        let #(x, y) = curr
-        let #(ax, ay) = a
-        let #(bx, by) = b
-        case x, y {
-            x, y if x < 0 || y < 0 -> Error(Nil)
-            x, y if x == 0 && y == 0 -> Ok(0)
-            x, y -> {
-                let try_a = tokens_helper(#(x-ax, y-ay), a, b, cache)
-                let try_b = tokens_helper(#(x-bx, y-by), a, b, cache)
-                case try_a, try_b {
-                    Ok(recurse_a), Ok(recurse_b) -> Ok(int.min(tokens_a + recurse_a, tokens_b + recurse_b))
-                    Ok(recurse_a), Error(_) -> Ok(tokens_a + recurse_a)
-                    Error(_), Ok(recurse_b) -> Ok(tokens_b + recurse_b)
-                    Error(_), Error(_) -> Error(Nil)
-                }
-            }
-        }
+pub fn modify_arcade_for_part2(arcade: Arcade) -> Arcade {
+    let #(x, y) = arcade.target
+    Arcade(..arcade, target: #(x + 10000000000000, y + 10000000000000))
+}
+
+pub fn tokens(arcade: Arcade) -> Result(Int, Nil) {
+    let #(a, b) = solve_linear_equations(arcade.a, arcade.b, arcade.target)
+    let #(ar, br) = #(float.round(a), float.round(b))
+
+    let tolerance = 0.001
+    let tokens_a = 3
+    let tokens_b = 1
+
+    let equal = float.loosely_equals(a, int.to_float(ar), tolerance) && float.loosely_equals(b, int.to_float(br), tolerance)
+    case equal {
+        False -> Error(Nil)
+        True -> Ok(tokens_a * ar + tokens_b * br)
     }
 }
 
+pub fn solve_linear_equations(v1: Coordinate, v2: Coordinate, vt: Target) -> #(Float, Float) {
+    // This solves the claw problem using vector algebra:
+    //   a*v1 + b*v2 = vt = a(x1,y1) + b(x2, y2) = (xt, yt)
+    // let (x1, y1) = v1
+    // let (x2, y2) = v2
+    // let (xt, yt) = vt
+    let assert [x1, y1, x2, y2, xt, yt] = {
+        [v1, v2, vt]
+        |> list.map(fn(t) {[pair.first(t), pair.second(t)]})
+        |> list.flatten
+        |> list.map(int.to_float)
+    }
+    let b = { {yt /. y2} -. { {xt *. y1} /. {x1 *. y2} } } /. { 1.0 -. { {y1 *. x2} /. {x1 *. y2} }}
+    let a = { xt /. x1 } -. { b *. {x2 /. x1} }
+    #(a, b)
+}
 
 pub fn parse(contents: String) -> List(Arcade) {
     let assert Ok(re) = regexp.compile(
