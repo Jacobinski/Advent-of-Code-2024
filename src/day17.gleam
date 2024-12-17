@@ -1,3 +1,4 @@
+import gleam/pair
 import gleam/float
 import gleam/string
 import gleam/int
@@ -13,12 +14,67 @@ pub type Computer{
     Computer(a: Int, b: Int, c: Int, pc: Int, out: List(Int))
 }
 pub type Program = dict.Dict(Int, Int)
+pub type ProgramList = List(Int)
 
 pub fn main() {
     let assert Ok(contents) = file.read("inputs/day17.txt")
     let #(computer, program) = parse(contents)
 
     io.println("Part 1: " <> part1(computer, program))
+    io.println("Part 2: " <> int.to_string(part2(computer, program)))
+}
+
+pub fn part2(computer: Computer, program: Program) -> Int {
+     let target = program
+        |> dict.to_list
+        |> list.sort(fn(a,b) { int.compare(pair.first(a), pair.first(b))})
+        |> list.map(pair.second)
+
+    io.debug(program)
+    io.debug(target)
+
+    let solutions = crack(computer, program, target, 1, 0)
+
+    let assert Ok(x) = solutions
+        // |> io.debug
+        |> list.sort(int.compare)
+        |> list.first
+    x
+}
+
+pub fn power(base: Int, exponent: Int) -> Int {
+    let assert Ok(x) = int.power(base, int.to_float(exponent))
+    float.round(x)
+}
+
+pub fn crack(computer: Computer, program: Program, target: List(Int), length: Int, a_partial: Int) -> List(Int) {
+    let max_length = list.length(target)
+    case length {
+        x if x > max_length -> [a_partial]
+        _ -> {
+            let partial_target = target
+                |> list.reverse
+                |> list.split(length)
+                |> pair.first
+                |> list.reverse
+
+            let candidates = [0, 1, 2, 3, 4, 5, 6, 7]
+                |> list.map(fn(x) { {8*a_partial}+x })
+
+            let partial_matches = candidates
+                |> list.filter_map(fn(register) {
+                    let comp = Computer(..computer, a: register)
+                    case partial_target == eval(comp, program) {
+                        True -> Ok(register)
+                        False -> Error(Nil)
+                    }
+                })
+
+            partial_matches
+            |> list.map(fn(a) { crack(computer, program, target, length+1, a) })
+            |> list.flatten
+        }
+    }
 }
 
 pub fn part1(computer: Computer, program: Program) -> String {
@@ -77,20 +133,6 @@ pub fn out(computer: Computer, program: Program) -> #(Computer, Program) {
     let out = list.append(computer.out, [operand % 8])
     #(Computer(..computer, out: out, pc: computer.pc + 2), program)
 }
-
-// pub fn bdv(computer: Computer, program: Program) -> #(Computer, Program) {
-//     let assert Ok(operand) = dict.get(program, computer.pc + 1)
-//     let num = int.to_float(computer.a)
-//     let assert Ok(den) = int.power(2, int.to_float(combo(operand, computer)))
-//     #(Computer(..computer, b: float.round(num /. den), pc: computer.pc + 2), program)
-// }
-
-// pub fn cdv(computer: Computer, program: Program) -> #(Computer, Program) {
-//     let assert Ok(operand) = dict.get(program, computer.pc + 1)
-//     let num = int.to_float(computer.a)
-//     let assert Ok(den) = int.power(2, int.to_float(combo(operand, computer)))
-//     #(Computer(..computer, c: float.round(num /. den), pc: computer.pc + 2), program)
-// }
 
 pub fn bdv(computer: Computer, program: Program) -> #(Computer, Program) {
     let assert Ok(operand) = dict.get(program, computer.pc + 1)
