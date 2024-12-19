@@ -11,6 +11,27 @@ pub fn main() {
     let #(towels, designs) = parse(contents)
 
     io.println("Part 1: " <> int.to_string(part1(designs, towels)))
+    io.println("Part 1: " <> int.to_string(part2(designs, towels)))
+}
+
+pub fn part2(designs: List(String), towels: List(String)) -> Int {
+    designs
+    |> list.map(fn(design) {
+        use cache <- memo.create() combinations(design, towels, cache)
+    })
+    |> list.fold(0, int.add)
+}
+
+pub fn combinations(design: String, towels: List(String), cache) -> Int {
+    use <- memo.memoize(cache, design)
+    case design {
+        "" -> 1
+        _ -> towels
+            |> list.filter(fn(towel) { string.starts_with(design, towel) })
+            |> list.map(fn(towel) { string.drop_start(design, string.length(towel)) })
+            |> list.map(fn(new_design) { combinations(new_design, towels, cache) })
+            |> list.fold(0, int.add)
+    }
 }
 
 pub fn part1(designs: List(String), towels: List(String)) -> Int {
