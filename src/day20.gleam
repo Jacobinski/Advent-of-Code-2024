@@ -7,7 +7,6 @@ import gleam/io
 import gleam/dict
 import gleam/pair
 import simplifile as file
-import gleam_community/ansi
 
 pub type Coordinate = #(Int, Int)
 pub type Tile {
@@ -21,14 +20,12 @@ const infinity = 9999999999999999
 
 pub fn main() {
     let assert Ok(contents) = file.read("inputs/day20.txt")
-
     let track = parse(contents)
-    visualize(track)
-
-    io.println("Part 1: " <> int.to_string(part1(track, 100)))
+    io.println("Part 1: " <> int.to_string(count_cheats(track, 2, 100)))
+    io.println("Part 2: " <> int.to_string(count_cheats(track, 20, 100)))
 }
 
-pub fn part1(track: dict.Dict(Coordinate, Tile), minimum_to_save_ps: Int) -> Int {
+pub fn count_cheats(track: dict.Dict(Coordinate, Tile), cheat_max_distance: Int, minimum_to_save_ps: Int) -> Int {
     let start = find(Start, track)
     let end = find(End, track)
     let seen = dict.new()
@@ -46,11 +43,28 @@ pub fn part1(track: dict.Dict(Coordinate, Tile), minimum_to_save_ps: Int) -> Int
 
     let assert Ok(base_ps) = dict.get(seen_from_start, end)
 
-    let cheat_ps = walls
-        |> set.to_list
-        |> list.map(fn(position) {
-            case dict.get(seen_from_start, position), dict.get(seen_from_end, position) {
-                Ok(start_to_wall_ps), Ok(end_to_wall_ps) -> {start_to_wall_ps + end_to_wall_ps}
+    let valid_cheat_start = track
+        |> dict.filter(fn(_, tile) { tile != Wall })
+        |> dict.keys
+    let valid_cheat_end = track
+        |> dict.filter(fn(_, tile) { tile != Wall })
+        |> dict.keys
+
+    let cheat_paths = valid_cheat_start
+        |> list.map(fn(start) {
+            valid_cheat_end
+            |> list.filter(fn(end) { manhattan_distance(start, end) <= cheat_max_distance })
+            |> list.map(fn(end) { #(start, end) })
+        })
+        |> list.flatten
+
+    let cheat_ps = cheat_paths
+        |> list.map(fn(path) {
+            let #(start, end) = path
+            case dict.get(seen_from_start, start), dict.get(seen_from_end, end) {
+                Ok(start_to_wall_ps), Ok(end_to_wall_ps) -> {
+                    start_to_wall_ps + end_to_wall_ps + manhattan_distance(start, end)
+                }
                 _, _ -> base_ps
             }
         })
@@ -58,6 +72,10 @@ pub fn part1(track: dict.Dict(Coordinate, Tile), minimum_to_save_ps: Int) -> Int
     cheat_ps
     |> list.map(fn(x) { base_ps - x })
     |> list.count(fn(x) { x >= minimum_to_save_ps })
+}
+
+pub fn manhattan_distance(a: Coordinate, b: Coordinate) -> Int {
+    int.absolute_value(a.0 - b.0) + int.absolute_value(a.1 - b.1)
 }
 
 pub fn dijkstra(start: Coordinate, end: Coordinate, seen: dict.Dict(Coordinate, Int), unseen: dict.Dict(Coordinate, Int), walls: set.Set(Coordinate)) -> Result(dict.Dict(Coordinate, Int), Nil) {
@@ -141,37 +159,4 @@ pub fn parse(contents: String) -> dict.Dict(Coordinate, Tile) {
     })
     |> list.flatten
     |> dict.from_list
-}
-
-pub fn visualize(maze: dict.Dict(Coordinate, Tile)) {
-    maze
-    |> dict.to_list
-    |> list.group(fn(tup) {
-        let #(_, y) = pair.first(tup)
-        y
-    })
-    |> dict.to_list
-    |> list.sort(fn(a, b) {
-        int.compare(pair.first(a), pair.first(b))
-    })
-    |> list.map(fn(row) {
-        pair.second(row)
-        |> list.sort(fn(a, b) {
-            let #(xa, _) = pair.first(a)
-            let #(xb, _) = pair.first(b)
-            int.compare(xa, xb)
-        })
-        |> list.map(fn(x) {
-            let #(_position, tile) = x
-            case tile {
-                Empty -> ansi.white(".")
-                Wall -> ansi.blue("#")
-                Start -> ansi.green("S")
-                End -> ansi.red("E")
-            }
-        })
-        |> string.join("")
-    })
-    |> string.join("\n")
-    |> io.println
 }
