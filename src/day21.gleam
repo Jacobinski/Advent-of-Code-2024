@@ -1,10 +1,11 @@
+import gleam/set
 import gleam/pair
 import gleam/int
 import gleam/string
 import gleam/io
 import gleam/list
-import gleam/order
 import gleam/dict
+import rememo/memo
 import simplifile as file
 
 pub type NumericKey {
@@ -29,13 +30,14 @@ pub type DirectionalKey {
     DKeyA
 }
 
-const infinity = 999999999
+const infinity = 9999999999999999999999999999999999999999999999999999999
 
 pub fn main() {
     let assert Ok(contents) = file.read("inputs/day21.txt")
     let codes = string.split(contents, "\n")
 
     io.println("Part 1: " <> int.to_string(part1(codes)))
+    io.println("Part 2: " <> int.to_string(part2(codes)))
 }
 
 pub fn part1(codes: List(String)) -> Int {
@@ -44,90 +46,102 @@ pub fn part1(codes: List(String)) -> Int {
         let assert Ok(num) = int.parse(string.drop_end(code, 1))
         let length = code
             |> numeric_robot
-            |> list.flat_map(fn(code) { directional_robot(code) })
-            |> list.flat_map(fn(code) { directional_robot(code) })
-            |> list.map(string.length)
-            |> list.fold(infinity, fn(best, curr) {
-                case curr < best {
-                    True -> curr
-                    False -> best
-                }
-            })
+            |> list.map(fn(path) { compute_input_length(path, 2) })
+            |> list.fold(infinity, int.min)
         num * length
     })
     |> list.fold(0, int.add)
 }
 
-pub fn numeric_robot(command: String) -> List(String) {
-    let all_paths_segments = command
-        |> string.to_graphemes
-        |> list.fold(#([], NKeyA), fn(acc, key) {
-            let #(sequences, prev) = acc
-            let curr = to_numeric_key(key)
-            let paths = numeric_keypad_paths(prev, curr)
-            #(list.append(sequences, [paths]), curr)
-        })
-        |> pair.first
-    let all_paths = all_paths_segments
-        |> list.fold([""], fn(acc, segments) {
-            segments
-            |> list.map(fn(segment) {
-                acc
-                |> list.map(fn(prev){
-                    prev <> segment
-                })
-            })
-            |> list.flatten
-        })
-    let shortest_paths = all_paths
-        |> list.fold([], fn(acc, candidate) {
-            case acc {
-                [] -> [candidate]
-                [best, .._] -> case int.compare(string.length(best), string.length(candidate)) {
-                    order.Lt -> acc
-                    order.Eq -> [candidate, ..acc]
-                    order.Gt -> [candidate]
-                }
+pub fn part2(codes: List(String)) -> Int {
+    codes
+    |> list.map(fn(code) {
+        let assert Ok(num) = int.parse(string.drop_end(code, 1))
+        let length = code
+            |> numeric_robot
+            |> list.map(fn(path) { compute_input_length(path, 25) })
+            |> list.fold(infinity, int.min)
+        num * length
+    })
+    |> list.fold(0, int.add)
+}
 
-            }
+pub fn compute_input_length(command: String, depth: Int) -> Int {
+  use cache <- memo.create()
+  compute(command, depth, cache)
+}
+
+pub fn compute(command: String, depth: Int, cache) -> Int {
+    use <- memo.memoize(cache, #(depth, command))
+    case depth {
+        0 -> string.length(command)
+        _ -> {
+            subcommands(command)
+            |> list.map(fn(cmd) {
+                let paths = directional_robot(cmd)
+                paths
+                |> list.map(fn(p) { compute(p, depth-1, cache) })
+                |> list.fold(infinity, int.min)
+            })
+            |> list.fold(0, int.add)
+        }
+    }
+}
+
+// Splits input string on "A" character. IE. "<^A<AA" -> ["<^A", "<A", "A"]
+pub fn subcommands(s: String) -> List(String) {
+    s
+    |> string.to_graphemes
+    |> list.fold(#([], ""), fn(acc, char) {
+        let #(words, partial) = acc
+        case char {
+            "A" -> #([partial <> "A", ..words], "")
+            x -> #(words, partial <> x)
+        }
+    })
+    |> pair.first
+    |> list.reverse
+}
+
+// [[A, B], [C], [D, E]] -> [[A, C, D], [A, C, E], [B, C, D], [B, C, E]]
+pub fn segment_join(segments: List(List(String))) -> List(String) {
+    segments
+    |> list.fold([""], fn(acc, segment) {
+        segment
+        |> list.map(fn(piece) {
+            acc
+            |> list.map(fn(prev){ prev <> piece })
         })
-    shortest_paths
+        |> list.flatten
+    })
+}
+
+pub fn numeric_robot(command: String) -> List(String) {
+    command
+    |> string.to_graphemes
+    |> list.fold(#([], NKeyA), fn(acc, key) {
+        let #(sequences, prev) = acc
+        let curr = to_numeric_key(key)
+        let paths = numeric_keypad_paths(prev, curr)
+        #([paths, ..sequences], curr)
+    })
+    |> pair.first
+    |> list.reverse
+    |> segment_join
 }
 
 pub fn directional_robot(command: String) -> List(String) {
-    let all_paths_segments = command
-        |> string.to_graphemes
-        |> list.fold(#([], DKeyA), fn(acc, key) {
-            let #(sequences, prev) = acc
-            let curr = to_directional_key(key)
-            let paths = directional_keypad_paths(prev, curr)
-            #(list.append(sequences, [paths]), curr)
-        })
-        |> pair.first
-    let all_paths = all_paths_segments
-        |> list.fold([""], fn(acc, segments) {
-            segments
-            |> list.map(fn(segment) {
-                acc
-                |> list.map(fn(prev){
-                    prev <> segment
-                })
-            })
-            |> list.flatten
-        })
-    let shortest_paths = all_paths
-        |> list.fold([], fn(acc, candidate) {
-            case acc {
-                [] -> [candidate]
-                [best, .._] -> case int.compare(string.length(best), string.length(candidate)) {
-                    order.Lt -> acc
-                    order.Eq -> [candidate, ..acc]
-                    order.Gt -> [candidate]
-                }
-
-            }
-        })
-    shortest_paths
+    command
+    |> string.to_graphemes
+    |> list.fold(#([], DKeyA), fn(acc, key) {
+        let #(sequences, prev) = acc
+        let curr = to_directional_key(key)
+        let paths = directional_keypad_paths(prev, curr)
+        #([paths, ..sequences], curr)
+    })
+    |> pair.first
+    |> list.reverse
+    |> segment_join
 }
 
 pub fn to_numeric_key(str: String) -> NumericKey {
@@ -176,34 +190,38 @@ pub fn numeric_keypad_paths(from: NumericKey, to: NumericKey) -> List(String) {
     let assert Ok(#(tx, ty)) = dict.get(positions, to)
     let dx = tx - fx
     let dy = ty - fy
+
     let out1 = case dx > 0 {
-        True -> string.repeat(">", dx)
-        False -> string.repeat("<", -dx)
+        True -> list.repeat(">", dx)
+        False -> list.repeat("<", -dx)
     }
     let out2 = case dy > 0 {
-        True -> string.repeat("v", dy)
-        False -> string.repeat("^", -dy)
+        True -> list.repeat("v", dy)
+        False -> list.repeat("^", -dy)
     }
 
-    // Optimize for the robot inputting each key press.
-    // It prefers to keep pressing the same key, instead of switching between
-    // keys (eg. ^^< is better than ^<^).
-    // In some cases, these preferences would put us over the hole of death.
-    // Do our best to avoid it
-    let force_vertical = {from == NKeyA || from == NKey0}
-        && {to == NKey1 || to == NKey4 || to == NKey7}
-    let force_horizontal = {from == NKey1 || from == NKey4 || from == NKey7}
-        && {to == NKeyA || to == NKey0}
+    let invalid = set.from_list(case from, to {
+        NKey7, NKey0 -> ["vvv>"]
+        NKey7, NKeyA -> ["vvv>>"]
+        NKey4, NKey0 -> ["vv>"]
+        NKey4, NKeyA -> ["vv>>"]
+        NKey1, NKey0 -> ["v>"]
+        NKey1, NKeyA -> ["v>>"]
+        NKey0, NKey1 -> ["<^"]
+        NKey0, NKey4 -> ["<^^"]
+        NKey0, NKey7 -> ["<^^^"]
+        NKeyA, NKey1 -> ["<<^"]
+        NKeyA, NKey4 -> ["<<^^"]
+        NKeyA, NKey7 -> ["<<^^^"]
+        _, _ -> []
+    })
 
-    case force_vertical, force_horizontal {
-        True, True -> panic
-        True, False -> [out2 <> out1 <> "A"]
-        False, True -> [out1 <> out2 <> "A"]
-        False, False -> case dx == 0 || dy == 0 {
-            True -> [out1 <> out2 <> "A"]
-            False -> [out1 <> out2 <> "A", out2 <> out1 <> "A"]
-        }
-    }
+    [out1, out2]
+    |> list.flatten
+    |> list.permutations
+    |> list.map(fn(x) {string.join(x, "")})
+    |> list.filter(fn(x) { False == set.contains(invalid, x) })
+    |> list.map(fn(x) { x <> "A"})
 }
 
 pub fn directional_keypad_paths(from: DirectionalKey, to: DirectionalKey) -> List(String) {
@@ -219,28 +237,26 @@ pub fn directional_keypad_paths(from: DirectionalKey, to: DirectionalKey) -> Lis
     let dx = tx - fx
     let dy = ty - fy
     let out1 = case dx > 0 {
-        True -> string.repeat(">", dx)
-        False -> string.repeat("<", -dx)
+        True -> list.repeat(">", dx)
+        False -> list.repeat("<", -dx)
     }
     let out2 = case dy > 0 {
-        True -> string.repeat("v", dy)
-        False -> string.repeat("^", -dy)
+        True -> list.repeat("v", dy)
+        False -> list.repeat("^", -dy)
     }
-    // Optimize for the robot inputting each key press.
-    // It prefers to keep pressing the same key, instead of switching between
-    // keys (eg. ^^< is better than ^<^).
-    // In some cases, these preferences would put us over the hole of death.
-    // Do our best to avoid it
-    let force_vertical = {from == DKeyUp || from == DKeyA} && to == DKeyLeft
-    let force_horizontal = from == DKeyLeft && {to == DKeyUp || to == DKeyA}
 
-    case force_vertical, force_horizontal {
-        True, True -> panic
-        True, False -> [out2 <> out1 <> "A"]
-        False, True -> [out1 <> out2 <> "A"]
-        False, False -> case dx == 0 || dy == 0 {
-            True -> [out1 <> out2 <> "A"]
-            False -> [out1 <> out2 <> "A", out2 <> out1 <> "A"]
-        }
-    }
+    let invalid = set.from_list(case from, to {
+        DKeyLeft, DKeyUp -> ["^>"]
+        DKeyLeft, DKeyA -> ["^>>"]
+        DKeyA, DKeyLeft -> ["<<v"]
+        DKeyUp, DKeyLeft -> ["<v"]
+        _, _ -> []
+    })
+
+    [out1, out2]
+    |> list.flatten
+    |> list.permutations
+    |> list.map(fn(x) {string.join(x, "")})
+    |> list.filter(fn(x) { False == set.contains(invalid, x) })
+    |> list.map(fn(x) { x <> "A"})
 }
