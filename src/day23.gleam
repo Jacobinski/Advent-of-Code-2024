@@ -5,6 +5,7 @@ import gleam/io
 import gleam/string
 import gleam/set
 import gleam/option
+import rememo/memo
 import simplifile as file
 
 pub fn main() {
@@ -12,6 +13,62 @@ pub fn main() {
     let connections = parse(contents)
 
     io.println("Part 1: " <> int.to_string(part1(connections)))
+    io.println("Part 2: " <> part2(connections))
+}
+
+pub fn part2(connections: dict.Dict(String, set.Set(String))) -> String {
+    maximum_clique(connections)
+    |> set.to_list
+    |> list.sort(string.compare)
+    |> string.join(",")
+}
+
+pub fn maximum_clique(connections: dict.Dict(String, set.Set(String))) -> set.Set(String) {
+    let seeds = dict.keys(connections)
+    let candidates = set.from_list(seeds)
+    let maximal_cliques = seeds
+        |> list.map(fn(seed) {
+            let initial_clique = set.from_list([seed])
+            use cache <- memo.create()
+            maximal_clique(initial_clique, set.difference(candidates, initial_clique), connections, cache)
+        })
+    maximal_cliques
+    |> list.fold(set.new(), fn(acc, clique) {
+        case set.size(clique) > set.size(acc) {
+            True -> clique
+            False -> acc
+        }
+    })
+}
+
+pub fn maximal_clique(clique: set.Set(String), candidates: set.Set(String), connections: dict.Dict(String, set.Set(String)), cache) -> set.Set(String) {
+    case set.to_list(candidates) {
+        [] -> clique
+        [candidate, ..remaining] -> {
+            use <- memo.memoize(cache, #(clique, candidate))
+            let valid = clique
+                |> set.to_list
+                |> list.all(fn(member) {
+                    let assert Ok(conns) = dict.get(connections, member)
+                    set.contains(conns, candidate)
+                })
+            let remaining = set.from_list(remaining)
+            case valid {
+                False -> maximal_clique(clique, remaining, connections, cache)
+                True -> {
+                    let with = maximal_clique(set.insert(clique, candidate), remaining, connections, cache)
+                    let without = maximal_clique(set.insert(clique, candidate), remaining, connections, cache)
+                    case set.size(with) > set.size(without) {
+                        True -> with
+                        False -> without
+                    }
+                }
+            }
+        }
+    }
+
+    // Memoize adding the candidate to the clique
+    // use <- memo.memoize(cache, #(clique, ))
 }
 
 pub fn part1(connections: dict.Dict(String, set.Set(String))) -> Int {
