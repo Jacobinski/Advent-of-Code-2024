@@ -46,18 +46,18 @@ pub fn maximal_clique(clique: set.Set(String), candidates: set.Set(String), conn
         [] -> clique
         [candidate, ..remaining] -> {
             use <- memo.memoize(cache, #(clique, candidate))
+            let remaining = set.from_list(remaining)
             let valid = clique
                 |> set.to_list
                 |> list.all(fn(member) {
                     let assert Ok(conns) = dict.get(connections, member)
                     set.contains(conns, candidate)
                 })
-            let remaining = set.from_list(remaining)
             case valid {
                 False -> maximal_clique(clique, remaining, connections, cache)
                 True -> {
                     let with = maximal_clique(set.insert(clique, candidate), remaining, connections, cache)
-                    let without = maximal_clique(set.insert(clique, candidate), remaining, connections, cache)
+                    let without = maximal_clique(clique, remaining, connections, cache)
                     case set.size(with) > set.size(without) {
                         True -> with
                         False -> without
