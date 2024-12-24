@@ -45,6 +45,8 @@ pub fn maximal_clique(clique: set.Set(String), candidates: set.Set(String), conn
     case set.to_list(candidates) {
         [] -> clique
         [candidate, ..remaining] -> {
+            // TODO: This caching logic is not correct and leads to very long run times.
+            //       Switch to using the Bron Kerbosch algorithm instead.
             use <- memo.memoize(cache, #(clique, candidate))
             let remaining = set.from_list(remaining)
             let valid = clique
@@ -66,9 +68,6 @@ pub fn maximal_clique(clique: set.Set(String), candidates: set.Set(String), conn
             }
         }
     }
-
-    // Memoize adding the candidate to the clique
-    // use <- memo.memoize(cache, #(clique, ))
 }
 
 pub fn part1(connections: dict.Dict(String, set.Set(String))) -> Int {
