@@ -1,12 +1,13 @@
+import gleam/set
 import gleam/pair
 import gleam/bool
-import gleam/option
 import gleam/dict
 import gleam/io
 import gleam/string
 import gleam/int
 import gleam/list
 import gleam/regexp
+import gleam/option
 import simplifile as file
 
 pub type Wire = String
@@ -21,97 +22,100 @@ pub fn main() {
     let #(wires, rules) = parse(contents)
 
     io.println("Part 1: " <> int.to_string(part1(wires, rules)))
-
-    let wires = dict.from_list([
-        // 4
-        #("x00", False),
-        #("x01", False),
-        #("x02", True),
-        // 7
-        #("y00", True),
-        #("y01", True),
-        #("y02", True),
-    ])
-    let rules = generate_full_adder_circuit(2) |> list.map(io_print_rule)
-    io.println("Test: " <> int.to_string(part1(wires, rules)))
+    io.println("Part 2: " <> part2(rules))
 }
 
-pub fn io_print_rule(rule: Rule) -> Rule {
-    // The `case` statement doesn't like the `bool.` prefix
-    // This works around the issue.
-    let and = bool.and
-    let or = bool.or
-    let xor = bool.exclusive_or
-
-    let op = case rule.op {
-        op if op == and -> " AND "
-        op if op == or -> " OR "
-        op if op == xor -> " XOR "
-        _ -> panic
-    }
-    io.println(rule.left <> op <> rule.right <> " -> " <> rule.result)
-    rule
+pub fn part2(rules: List(Rule)) -> String {
+    find_swapped_wires(0, "", rules, [])
+    |> set.from_list
+    |> set.to_list
+    |> list.sort(string.compare)
+    |> string.join(",")
 }
 
-// The logic gates in Part 2 attempt to simulate a full adder circuit.
-//  https://www.101computing.net/binary-additions-using-logic-gates/
-// We will solve this problem by making a canonical full adder circuit
-// and then mapping our known good circuit to the broken circuit.
-pub fn generate_full_adder_circuit(bits: Int) -> List(Rule) {
-    list.append(
-        half_adder(x: "x00", y: "y00", sum: "z00", carry: "c00"),
-        list.range(1, bits) |> list.flat_map(full_adder)
-    )
-    |> list.map(fn(rule) {
-        // Make the last rule output a `z` instead of a `c`
-        let c_a = "cA" <> to_suffix(bits)
-        let c_b = "cB" <> to_suffix(bits)
-        let c_out = "c" <> to_suffix(bits)
-        let z_out = "z" <> to_suffix(bits + 1)
-        let find = Rule(left: c_a, op: bool.or, right: c_b, result: c_out)
-        let replace = Rule(left: c_a, op: bool.or, right: c_b, result: z_out)
-        case rule == find {
-            True -> replace
-            False -> rule
-        }
-    })
-}
-
-pub fn half_adder(x x: String, y y: String, sum sum: String, carry carry: String) -> List(Rule) {
-    // let x = "x" <> to_suffix(index)
-    // let y = "y" <> to_suffix(index)
-    // let c = "c" <> to_suffix(index)
-    // let z = "z" <> to_suffix(index)
-    [
-        Rule(left: x, op: bool.exclusive_or, right: y, result: sum),
-        Rule(left: x, op: bool.and, right: y, result: carry),
-    ]
-}
-
-pub fn full_adder(index: Int) -> List(Rule) {
-    //  x__ -> input x variable
-    //  y__ -> input y variable
-    //  z__ -> output z variable
-    //  c__ -> output carry variable
-    //  sA__ -> intermediate sum variable
-    //  cA__ -> intermediate carry variable
-    //  cB__ -> intermediate carry variable
+pub fn find_swapped_wires(index: Int, carry: Wire, rules: List(Rule), swapped: List(Wire)) -> List(Wire) {
     let x = "x" <> to_suffix(index)
     let y = "y" <> to_suffix(index)
     let z = "z" <> to_suffix(index)
-    let c_in = "c" <> to_suffix(index-1)
-    let c_out = "c" <> to_suffix(index)
+    case index {
+        i if i < 0 -> panic
+        i if i > 44 -> swapped
+        0 -> {
+            let #(sum, carry, swap) = half_adder(x, y, rules)
+            let new_swapped = case sum == z {
+                True -> list.flatten([swapped, swap])
+                False -> list.flatten([swapped, swap, [sum]])
+            }
+            find_swapped_wires(index + 1, carry, rules, new_swapped)
+        }
+        _ -> {
+            let #(sum, new_carry, swap) = full_adder(x, y, carry, rules)
+            let new_swapped = case sum == z {
+                True -> list.flatten([swapped, swap])
+                False -> list.flatten([swapped, swap, [sum]])
+            }
+            find_swapped_wires(index + 1, new_carry, rules, new_swapped)
+        }
+    }
+}
 
-    let s_a = "sA" <> to_suffix(index)
-    let c_a = "cA" <> to_suffix(index)
-    let c_b = "cB" <> to_suffix(index)
-    list.flatten(
-        [
-            half_adder(x: x, y: y, sum: s_a, carry: c_a),
-            half_adder(x: c_in, y: s_a, sum: z, carry: c_b),
-            [ Rule(left: c_a, op: bool.or, right: c_b, result: c_out) ],
-        ]
-    )
+pub type Sum = Wire
+pub type Carry = Wire
+
+pub fn half_adder(a: Wire, b: Wire, rules: List(Rule)) -> #(Sum, Carry, List(Wire)) {
+    let #(sum, swapped_sum) = find(a, b, bool.exclusive_or, rules)
+    let #(carry, swapped_carry) = find(a, b, bool.and, rules)
+
+    #(sum, carry, list.flatten([swapped_carry, swapped_sum]))
+}
+
+pub fn full_adder(a: Wire, b: Wire, c_in: Wire, rules: List(Rule)) -> #(Sum, Carry, List(Wire)) {
+    // A full adder consists of two half adders.
+    // https://www.101computing.net/binary-additions-using-logic-gates/
+    let #(s1, c1, swapped1) = half_adder(a, b, rules)
+    let #(sum, c2, swapped2) = half_adder(c_in, s1, rules)
+    let #(c_out, swapped3) = find(c1, c2, bool.or, rules)
+
+    #(sum, c_out, list.flatten([swapped1, swapped2, swapped3]))
+}
+
+// Find the `result` field of the rule matching the input targets and operator.
+// If an incomplete match was found (op and one of the two targets), the Option(Wire)
+// will contain the other wire. This safeguards us from flipped wire outputs.
+pub fn find(target1: Wire, target2: Wire, op: Operator, rules: List(Rule)) -> #(Wire, List(Wire)) {
+    let match = list.find(rules, fn(rule) {
+        { rule.op == op } &&
+        {
+            { rule.left == target1 && rule.right == target2 } ||
+            { rule.right == target1 && rule.left == target2 }
+        }
+    })
+    case match {
+        Ok(rule) -> #(rule.result, [])
+        Error(_) -> {
+            let match_left_target1 = list.find(rules, fn(rule) {
+                rule.op == op && rule.left == target1
+            })
+            let match_left_target2 = list.find(rules, fn(rule) {
+                rule.op == op && rule.left == target2
+            })
+            let match_right_target1 = list.find(rules, fn(rule) {
+                rule.op == op && rule.right == target1
+            })
+            let match_right_target2 = list.find(rules, fn(rule) {
+                rule.op == op && rule.right == target2
+            })
+            // Add the correct wire (taken from the rule) and the
+            // incorrect wire (taken from the target) to the swapped list.
+            case match_left_target1, match_left_target2, match_right_target1, match_right_target2 {
+                Ok(rule), Error(_), Error(_), Error(_) -> #(rule.result, [rule.right, target2])
+                Error(_), Ok(rule), Error(_), Error(_) -> #(rule.result, [rule.right, target1])
+                Error(_), Error(_), Ok(rule), Error(_) -> #(rule.result, [rule.left, target2])
+                Error(_), Error(_), Error(_), Ok(rule) -> #(rule.result, [rule.left, target1])
+                _, _, _, _ -> panic
+            }
+        }
+    }
 }
 
 pub fn to_suffix(x: Int) -> String {
